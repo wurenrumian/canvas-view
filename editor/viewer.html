@@ -270,27 +270,84 @@
           applyView()
         }
 
-        /* Wheel zooms about the pointer on a mouse; a trackpad keeps the platform
-           behaviour: two-finger scroll pans, pinch zooms. Alt forces pan, Ctrl/Meta
-           forces zoom, so a misread device is always one modifier away. */
+        /* Wheel: a mouse wheel zooms about the pointer, a trackpad keeps the
+           platform behaviour (two-finger scroll pans, pinch zooms). The device
+           is inferred from the wheel events and held steady between gestures;
+           Settings → Plugins → Canvas View can pin it instead. Alt always pans
+           and Ctrl/Meta always zooms, so a wrong inference is one key away. */
         const IS_MAC = /Mac/i.test(navigator.userAgent || '')
-        const MOUSE_WHEEL_STEP = IS_MAC ? 4 : 100
-        let lastWheelDevice = null
+        const MOUSE_WHEEL_STEP = IS_MAC ? 4 : 40
+        const TRACKPAD_WHEEL_STEP = IS_MAC ? 1.5 : 20
+        const BURST_GAP_MS = 120
+        const WHEEL_SETTING = 'wheel'
 
-        function classifyWheel(event) {
-          if (event.deltaMode !== 0) return 'mouse'
-          if (event.deltaX !== 0) return 'trackpad'
-          if (!Number.isInteger(event.deltaY)) return 'trackpad'
-          return Math.abs(event.deltaY) >= MOUSE_WHEEL_STEP ? 'mouse' : 'trackpad'
+        let wheelPreference = 'auto'
+        let wheelDevice = 'mouse'
+        let lastWheelAt = 0
+        let shownHint = null
+
+        function readWheelMode(value) {
+          const raw = value && typeof value === 'object' ? (value.settings || value)[WHEEL_SETTING] : value
+          return raw === 'zoom' || raw === 'pan' ? raw : 'auto'
         }
 
-        function setHint(device) {
-          if (device === lastWheelDevice || !hint) return
-          lastWheelDevice = device
-          hint.textContent =
-            device === 'trackpad'
-              ? 'Drag to pan · Scroll to pan · Pinch to zoom · Double-click to reset'
-              : 'Drag to pan · Wheel to zoom · Double-click to reset'
+        function hintFor(mode) {
+          return mode === 'pan'
+            ? 'Drag to pan · Scroll to pan · Pinch to zoom · Double-click to reset'
+            : 'Drag to pan · Wheel to zoom · Double-click to reset'
+        }
+
+        function setHint(mode, force) {
+          if (!hint) return
+          if (!force && mode === shownHint) return
+          shownHint = mode
+          hint.textContent = hintFor(mode)
+        }
+
+        /* settings.get(key) answers with the value on hosts that accept a key,
+           and with { settings } where it only answers the raw call. */
+        async function loadWheelPreference() {
+          const api = window.orca && window.orca.settings
+          if (!api || typeof api.get !== 'function') return
+          let value
+          try {
+            value = await api.get(WHEEL_SETTING)
+          } catch {
+            try {
+              value = await api.get()
+            } catch {
+              return
+            }
+          }
+          wheelPreference = readWheelMode(value)
+          if (wheelPreference !== 'auto') setHint(wheelPreference)
+          else setHint(wheelDevice === 'mouse' ? 'zoom' : 'pan', true)
+        }
+
+        function watchWheelPreference() {
+          const api = window.orca && window.orca.settings
+          if (!api || typeof api.onDidChange !== 'function') return
+          try {
+            api.onDidChange((change) => {
+              if (change && change.key && change.key !== WHEEL_SETTING) return
+              loadWheelPreference()
+            })
+          } catch {
+            /* no live updates: the setting applies on the next open */
+          }
+        }
+
+        /* A wheel notch is one large step, a trackpad is a burst of small ones.
+           Between the two the previous device wins, so a single odd value never
+           flips the gesture mid-scroll. */
+        function wheelDeviceFor(event, now) {
+          if (event.deltaMode !== 0) return 'mouse'
+          if (Math.abs(event.deltaX) > 0) return 'trackpad'
+          const step = Math.abs(event.deltaY)
+          if (step === 0) return null
+          if (step >= MOUSE_WHEEL_STEP) return 'mouse'
+          if (step <= TRACKPAD_WHEEL_STEP) return 'trackpad'
+          return now - lastWheelAt < BURST_GAP_MS ? 'trackpad' : 'mouse'
         }
 
         viewport.addEventListener(
@@ -299,10 +356,15 @@
             if (!media.ready) return
             event.preventDefault()
 
-            const device = classifyWheel(event)
-            setHint(device)
+            const now = performance.now()
+            const device = wheelDeviceFor(event, now)
+            if (device) wheelDevice = device
+            lastWheelAt = now
+
             const forced = event.altKey ? 'pan' : event.ctrlKey || event.metaKey ? 'zoom' : null
-            const mode = forced || (device === 'mouse' ? 'zoom' : 'pan')
+            const detected = wheelDevice === 'mouse' ? 'zoom' : 'pan'
+            const mode = forced || (wheelPreference === 'auto' ? detected : wheelPreference)
+            setHint(mode)
 
             if (mode === 'pan') {
               panBy(-event.deltaX, -event.deltaY)
@@ -553,6 +615,8 @@
             showMessage('This viewer must run inside Orca.')
             return
           }
+          loadWheelPreference()
+          watchWheelPreference()
           try {
             window.orca.document.onDidChange((doc) => {
               try {

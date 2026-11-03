@@ -38,7 +38,17 @@ function mockFor(kind) {
   return `window.__errors = []
 window.addEventListener('error', function (event) { window.__errors.push(String(event.message)) })
 window.addEventListener('unhandledrejection', function (event) { window.__errors.push('rejection: ' + String(event.reason)) })
+window.__wheelSetting = 'auto'
+window.__wheelListeners = []
 window.orca = {
+  settings: {
+    get(key) {
+      return Promise.resolve(key ? window.__wheelSetting : { settings: { wheel: window.__wheelSetting } })
+    },
+    onDidChange(handler) {
+      window.__wheelListeners.push(handler)
+    }
+  },
   document: {
     onDidChange(handler) {
       const binary = atob('${pngBase64}')
@@ -49,6 +59,10 @@ ${documentCall}
       }, 10)
     }
   }
+}
+window.__setWheel = function (value) {
+  window.__wheelSetting = value
+  window.__wheelListeners.forEach(function (handler) { handler({ key: 'wheel', value: value }) })
 }
 `
 }

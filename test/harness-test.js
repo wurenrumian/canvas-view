@@ -95,6 +95,59 @@
     'scale ' + afterTrackpad.s.toFixed(3) + ' dx=' + (afterTrackpad.x - beforeTrackpad.x).toFixed(1) + ' dy=' + (afterTrackpad.y - beforeTrackpad.y).toFixed(1)
   )
 
+  const beforeBurst = read()
+  viewport.dispatchEvent(
+    new WheelEvent('wheel', { deltaY: -30, deltaMode: 0, clientX: cx, clientY: cy, bubbles: true, cancelable: true })
+  )
+  const afterBurst = read()
+  pass(
+    'an ambiguous delta inside a trackpad burst pans',
+    Math.abs(afterBurst.s - beforeBurst.s) < 1e-9 && Math.abs(afterBurst.y - beforeBurst.y - 30) < 1,
+    'scale ' + afterBurst.s.toFixed(3) + ' dy=' + (afterBurst.y - beforeBurst.y).toFixed(1)
+  )
+
+  await new Promise((resolve) => setTimeout(resolve, 250))
+  const beforeLone = read()
+  viewport.dispatchEvent(
+    new WheelEvent('wheel', { deltaY: -30, deltaMode: 0, clientX: cx, clientY: cy, bubbles: true, cancelable: true })
+  )
+  const afterLone = read()
+  pass(
+    'the same delta on its own zooms',
+    afterLone.s > beforeLone.s,
+    beforeLone.s.toFixed(3) + ' -> ' + afterLone.s.toFixed(3)
+  )
+
+  window.__setWheel('pan')
+  await new Promise((resolve) => setTimeout(resolve, 50))
+  const beforePinnedPan = read()
+  viewport.dispatchEvent(
+    new WheelEvent('wheel', { deltaY: -100, deltaMode: 0, clientX: cx, clientY: cy, bubbles: true, cancelable: true })
+  )
+  const afterPinnedPan = read()
+  pass(
+    'setting "Pan" pans a mouse wheel',
+    Math.abs(afterPinnedPan.s - beforePinnedPan.s) < 1e-9 &&
+      Math.abs(afterPinnedPan.y - beforePinnedPan.y - 100) < 1,
+    'scale ' + afterPinnedPan.s.toFixed(3) + ' dy=' + (afterPinnedPan.y - beforePinnedPan.y).toFixed(1)
+  )
+
+  window.__setWheel('zoom')
+  await new Promise((resolve) => setTimeout(resolve, 50))
+  const beforePinnedZoom = read()
+  viewport.dispatchEvent(
+    new WheelEvent('wheel', { deltaY: -8, deltaX: 3, deltaMode: 0, clientX: cx, clientY: cy, bubbles: true, cancelable: true })
+  )
+  const afterPinnedZoom = read()
+  pass(
+    'setting "Zoom" zooms a trackpad-sized delta',
+    afterPinnedZoom.s > beforePinnedZoom.s,
+    beforePinnedZoom.s.toFixed(3) + ' -> ' + afterPinnedZoom.s.toFixed(3)
+  )
+
+  window.__setWheel('auto')
+  await new Promise((resolve) => setTimeout(resolve, 50))
+
   const beforeAlt = read()
   viewport.dispatchEvent(
     new WheelEvent('wheel', { deltaY: 100, deltaMode: 0, altKey: true, clientX: cx, clientY: cy, bubbles: true, cancelable: true })

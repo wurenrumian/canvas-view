@@ -17,9 +17,23 @@ An alternative image viewer for the Orca editor tab with **inverted gestures**:
 | Arrow keys | — | pan (Shift for a bigger step) |
 
 Mouse wheel and trackpad are told apart from the shape of the wheel event: a mouse
-sends one large integer step, a trackpad sends small, fractional or horizontal
-deltas. If the guess is ever wrong, `Alt+wheel` always pans and `Ctrl`/`Cmd`+wheel
-always zooms.
+sends one large step on its own, a trackpad sends a burst of small or horizontal
+ones. Between the two the last device wins, so a single odd value cannot flip the
+gesture mid-scroll. If the guess is ever wrong, `Alt+wheel` always pans and
+`Ctrl`/`Cmd`+wheel always zooms.
+
+## Settings
+
+**Settings → Plugins → Canvas View → Mouse wheel**
+
+| Value | Effect |
+| --- | --- |
+| Auto-detect (default) | Mouse wheel zooms, trackpad scroll pans, pinch zooms |
+| Zoom | Every wheel event zooms, trackpad included |
+| Pan | Every wheel event pans, mouse wheel included |
+
+The choice is stored by Orca (capability `settings:own`) and applies to open tabs as
+soon as it changes.
 
 ## Coverage
 
@@ -59,7 +73,8 @@ orca plugin dev watch . --json
 ```
 
 Installing is a `sandboxed-ui` plugin, so Orca asks for approval: the editor reads
-every file it opens. Approve only this plugin.
+every file it opens, and `settings:own` lets it read the one setting above. Approve
+only this plugin.
 
 ## Verify the gestures
 
