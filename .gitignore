@@ -1,0 +1,7 @@
+# Orca writes generated typings here
+.orca/
+
+# harness output
+test/.harness-*.html
+test/.orca-mock-*.js
+test/.chrome-profile-*/

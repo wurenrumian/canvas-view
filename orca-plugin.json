@@ -1,0 +1,50 @@
+{
+  "manifestVersion": 2,
+  "id": "canvas-view",
+  "name": "Canvas View",
+  "version": "0.1.0",
+  "description": "Views images and SVGs on a canvas: drag to pan, wheel to zoom.",
+  "engines": {
+    "orca": ">=1.4.246"
+  },
+  "execution": "sandboxed-ui",
+  "pluginApi": 1,
+  "contributes": {
+    "customEditors": [
+      {
+        "id": "canvas-raster",
+        "title": "Canvas",
+        "extensions": [
+          ".png",
+          ".apng",
+          ".jpg",
+          ".jpeg",
+          ".gif",
+          ".webp",
+          ".bmp",
+          ".ico",
+          ".avif"
+        ],
+        "entry": "editor/viewer.html",
+        "priority": "default",
+        "contentKind": "bytes"
+      },
+      {
+        "id": "canvas-svg-text",
+        "title": "Canvas",
+        "extensions": [".svg"],
+        "entry": "editor/viewer.html",
+        "priority": "default",
+        "contentKind": "text"
+      },
+      {
+        "id": "canvas-svg-bytes",
+        "title": "Canvas",
+        "extensions": [".svg"],
+        "entry": "editor/viewer.html",
+        "priority": "default",
+        "contentKind": "bytes"
+      }
+    ]
+  }
+}
