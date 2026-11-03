@@ -3,8 +3,14 @@
   "id": "canvas-view",
   "name": "Canvas View",
   "version": "0.1.0",
+  "publisher": "wurenrumian",
+  "license": "MIT",
   "description": "Views images and SVGs on a canvas: drag to pan, wheel to zoom.",
   "icon": "icon.png",
+  "cover": {
+    "path": "assets/cover.png",
+    "alt": "Canvas View cover: a photo and a magnifier on an indigo to cyan gradient."
+  },
   "engines": {
     "orca": ">=1.4.246"
   },

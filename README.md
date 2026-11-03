@@ -75,3 +75,7 @@ Set `CHROME_PATH` if Chrome is installed somewhere else.
 - Transparent images get a subtle checkerboard background.
 - Colors follow Orca's theme through `--orca-background`, `--orca-foreground` and
   `--orca-border`.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
