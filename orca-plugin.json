@@ -4,6 +4,7 @@
   "name": "Canvas View",
   "version": "0.1.0",
   "description": "Views images and SVGs on a canvas: drag to pan, wheel to zoom.",
+  "icon": "icon.png",
   "engines": {
     "orca": ">=1.4.246"
   },
