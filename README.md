@@ -4,15 +4,22 @@ An alternative image viewer for the Orca editor tab with **inverted gestures**:
 
 | Gesture | Orca's built-in viewer | This plugin |
 | --- | --- | --- |
-| Wheel / two-finger scroll | pan | **zoom** (anchored at the pointer) |
+| Mouse wheel | pan | **zoom** (anchored at the pointer) |
+| Trackpad two-finger scroll | pan | pan (unchanged) |
+| Pinch / Ctrl+wheel | zoom | zoom |
 | Drag (left button) | nothing (Alt+drag pans) | **pan** |
 | Drag with Alt | pan | pan |
-| Two-finger pinch / touch drag | zoom / pan | pan + pinch zoom |
+| Alt+wheel | — | force pan (override) |
 | Double-click | fit ↔ 100% | fit ↔ 100% |
 | `+` / `-` | — | zoom in / out |
 | `0` or `F` | — | fit to view |
 | `1` | — | actual size (100%) |
 | Arrow keys | — | pan (Shift for a bigger step) |
+
+Mouse wheel and trackpad are told apart from the shape of the wheel event: a mouse
+sends one large integer step, a trackpad sends small, fractional or horizontal
+deltas. If the guess is ever wrong, `Alt+wheel` always pans and `Ctrl`/`Cmd`+wheel
+always zooms.
 
 ## Coverage
 

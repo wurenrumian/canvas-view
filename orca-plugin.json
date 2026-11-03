@@ -2,7 +2,7 @@
   "manifestVersion": 2,
   "id": "canvas-view",
   "name": "Canvas View",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "wurenrumian",
   "license": "MIT",
   "description": "Views images and SVGs on a canvas: drag to pan, wheel to zoom.",

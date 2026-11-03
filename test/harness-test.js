@@ -75,11 +75,43 @@
     'dx=' + (imageX2 - imageX).toFixed(2) + ' dy=' + (imageY2 - imageY).toFixed(2)
   )
 
+  const beforePinch = read()
+  viewport.dispatchEvent(
+    new WheelEvent('wheel', { deltaY: -100, deltaMode: 0, ctrlKey: true, clientX: cx, clientY: cy, bubbles: true, cancelable: true })
+  )
+  const afterPinch = read()
+  pass('ctrl+wheel (pinch) zooms', afterPinch.s > beforePinch.s, beforePinch.s.toFixed(3) + ' -> ' + afterPinch.s.toFixed(3))
+
+  const beforeTrackpad = read()
+  viewport.dispatchEvent(
+    new WheelEvent('wheel', { deltaY: 12, deltaX: 4, deltaMode: 0, clientX: cx, clientY: cy, bubbles: true, cancelable: true })
+  )
+  const afterTrackpad = read()
+  pass(
+    'trackpad scroll pans instead of zooming',
+    Math.abs(afterTrackpad.s - beforeTrackpad.s) < 1e-9 &&
+      Math.abs(afterTrackpad.x - beforeTrackpad.x + 4) < 1 &&
+      Math.abs(afterTrackpad.y - beforeTrackpad.y + 12) < 1,
+    'scale ' + afterTrackpad.s.toFixed(3) + ' dx=' + (afterTrackpad.x - beforeTrackpad.x).toFixed(1) + ' dy=' + (afterTrackpad.y - beforeTrackpad.y).toFixed(1)
+  )
+
+  const beforeAlt = read()
+  viewport.dispatchEvent(
+    new WheelEvent('wheel', { deltaY: 100, deltaMode: 0, altKey: true, clientX: cx, clientY: cy, bubbles: true, cancelable: true })
+  )
+  const afterAlt = read()
+  pass(
+    'alt+wheel forces pan even on a mouse',
+    Math.abs(afterAlt.s - beforeAlt.s) < 1e-9 && Math.abs(afterAlt.y - beforeAlt.y + 100) < 1,
+    'scale ' + afterAlt.s.toFixed(3) + ' dy=' + (afterAlt.y - beforeAlt.y).toFixed(1)
+  )
+
+  const beforeOut = read()
   viewport.dispatchEvent(
     new WheelEvent('wheel', { deltaY: 300, deltaMode: 0, clientX: cx, clientY: cy, bubbles: true, cancelable: true })
   )
   const zoomedOut = read()
-  pass('wheel down zooms out', zoomedOut.s < zoomed.s, zoomed.s.toFixed(3) + ' -> ' + zoomedOut.s.toFixed(3))
+  pass('wheel down zooms out', zoomedOut.s < beforeOut.s, beforeOut.s.toFixed(3) + ' -> ' + zoomedOut.s.toFixed(3))
 
   const panStart = read()
   viewport.dispatchEvent(

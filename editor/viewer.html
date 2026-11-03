@@ -186,6 +186,7 @@
         const image = document.getElementById('image')
         const zoomButton = document.getElementById('zoom')
         const metaLabel = document.getElementById('meta')
+        const hint = document.getElementById('hint')
         const overlay = document.getElementById('overlay')
         const overlayText = document.getElementById('overlay-text')
 
@@ -269,12 +270,45 @@
           applyView()
         }
 
-        /* Wheel zooms about the pointer, with no modifier key. */
+        /* Wheel zooms about the pointer on a mouse; a trackpad keeps the platform
+           behaviour: two-finger scroll pans, pinch zooms. Alt forces pan, Ctrl/Meta
+           forces zoom, so a misread device is always one modifier away. */
+        const IS_MAC = /Mac/i.test(navigator.userAgent || '')
+        const MOUSE_WHEEL_STEP = IS_MAC ? 4 : 100
+        let lastWheelDevice = null
+
+        function classifyWheel(event) {
+          if (event.deltaMode !== 0) return 'mouse'
+          if (event.deltaX !== 0) return 'trackpad'
+          if (!Number.isInteger(event.deltaY)) return 'trackpad'
+          return Math.abs(event.deltaY) >= MOUSE_WHEEL_STEP ? 'mouse' : 'trackpad'
+        }
+
+        function setHint(device) {
+          if (device === lastWheelDevice || !hint) return
+          lastWheelDevice = device
+          hint.textContent =
+            device === 'trackpad'
+              ? 'Drag to pan · Scroll to pan · Pinch to zoom · Double-click to reset'
+              : 'Drag to pan · Wheel to zoom · Double-click to reset'
+        }
+
         viewport.addEventListener(
           'wheel',
           (event) => {
             if (!media.ready) return
             event.preventDefault()
+
+            const device = classifyWheel(event)
+            setHint(device)
+            const forced = event.altKey ? 'pan' : event.ctrlKey || event.metaKey ? 'zoom' : null
+            const mode = forced || (device === 'mouse' ? 'zoom' : 'pan')
+
+            if (mode === 'pan') {
+              panBy(-event.deltaX, -event.deltaY)
+              return
+            }
+
             const unit =
               event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? viewport.clientHeight : 1
             const delta = clamp(event.deltaY * unit, -WHEEL_DELTA_CAP, WHEEL_DELTA_CAP)
