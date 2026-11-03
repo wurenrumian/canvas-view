@@ -101,7 +101,8 @@ node test/run-harness.mjs
 
 Chrome is found at the usual install locations; set `CHROME_PATH` to override. The
 Chrome profile and the generated pages live in a temporary folder and are removed
-afterwards, so nothing is written into the plugin folder.
+afterwards, so nothing is written into the plugin folder. Node 22 or newer is needed:
+the harness talks to Chrome over its DevTools WebSocket.
 
 ## Notes
 

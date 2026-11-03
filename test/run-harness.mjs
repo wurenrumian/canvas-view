@@ -44,6 +44,10 @@ const viewBoxSvgText = await readFile(path.join(root, 'test/sample-viewbox.svg')
 const appMarker = '    <script>\n      ;(() => {'
 if (!viewer.includes(appMarker)) throw new Error('could not find the viewer script tag')
 
+if (typeof WebSocket === 'undefined') {
+  throw new Error('this harness drives Chrome over its DevTools socket, so it needs a Node with a global WebSocket (Node 22 or newer)')
+}
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 function mockFor(kind) {
