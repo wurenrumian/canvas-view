@@ -7,20 +7,50 @@
   const stage = document.getElementById('stage')
   const viewport = document.getElementById('viewport')
   const image = document.getElementById('image')
+  const overlay = document.getElementById('overlay')
 
-  const read = () => {
-    const match = /translate3d\((-?[\d.]+)px, (-?[\d.]+)px, 0(?:px)?\) scale\(([\d.]+)\)/.exec(stage.style.transform)
-    return match ? { x: Number(match[1]), y: Number(match[2]), s: Number(match[3]) } : null
-  }
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
   const waitFor = async (predicate, timeout = 5000) => {
     const start = performance.now()
     while (performance.now() - start < timeout) {
       if (predicate()) return true
-      await new Promise((resolve) => setTimeout(resolve, 25))
+      await sleep(25)
     }
     return false
   }
+
+  /* The size the viewer reports for the file: an SVG's viewBox size can differ
+     from image.naturalWidth, so the viewer publishes what it uses. */
+  const sourceSize = () => ({
+    width: Number(image.dataset.sourceWidth) || image.naturalWidth,
+    height: Number(image.dataset.sourceHeight) || image.naturalHeight
+  })
+
+  /* Rasters scale through the stage transform, vectors grow the img box, so the
+     scale comes from whichever one the file type uses. */
+  const read = () => {
+    const match = /^translate3d\((-?[\d.]+)px, (-?[\d.]+)px, 0(?:px)?\)(?: scale\(([\d.]+)\))?$/.exec(
+      stage.style.transform
+    )
+    if (!match) return null
+    const base = sourceSize().width
+    const scale = match[3] !== undefined ? Number(match[3]) : image.getBoundingClientRect().width / base
+    return { x: Number(match[1]), y: Number(match[2]), s: scale }
+  }
+
+  const wheel = (init) =>
+    viewport.dispatchEvent(
+      new WheelEvent('wheel', Object.assign({ deltaMode: 0, bubbles: true, cancelable: true }, init))
+    )
+
+  const pointer = (type, init) =>
+    viewport.dispatchEvent(
+      new PointerEvent(type, Object.assign({ bubbles: true, cancelable: true }, init))
+    )
+
+  const press = (key, init) =>
+    window.dispatchEvent(new KeyboardEvent('keydown', Object.assign({ key, bubbles: true, cancelable: true }, init)))
 
   const finish = () => {
     const failed = results.some((line) => line.startsWith('FAIL'))
@@ -38,8 +68,9 @@
     return
   }
 
-  const nw = image.naturalWidth
-  const nh = image.naturalHeight
+  const size = sourceSize()
+  const nw = size.width
+  const nh = size.height
   const initial = read()
   const vw = viewport.clientWidth
   const vh = viewport.clientHeight
@@ -54,6 +85,25 @@
     Math.abs(initial.x - (vw - nw * initial.s) / 2) < 0.75 &&
       Math.abs(initial.y - (vh - nh * initial.s) / 2) < 0.75
   )
+  pass(
+    'the canvas announces the image size',
+    String(viewport.getAttribute('aria-label') || '').includes(String(Math.round(nw))),
+    viewport.getAttribute('aria-label')
+  )
+
+  const isVector = String(window.__kind).indexOf('svg') === 0
+  if (window.__kind === 'svg-viewbox') {
+    pass(
+      'a viewBox-only SVG uses its viewBox size',
+      Math.round(nw) === 400 && Math.round(nh) === 100,
+      nw + 'x' + nh
+    )
+  }
+  pass(
+    isVector ? 'SVG is drawn at the zoomed size, not transform-scaled' : 'a raster keeps the transform scale',
+    isVector ? !stage.style.transform.includes('scale(') : stage.style.transform.includes('scale('),
+    stage.style.transform
+  )
 
   const cx = Math.round(vw * 0.3)
   const cy = Math.round(vh * 0.35)
@@ -61,9 +111,7 @@
   const imageX = (cx - before.x) / before.s
   const imageY = (cy - before.y) / before.s
 
-  viewport.dispatchEvent(
-    new WheelEvent('wheel', { deltaY: -100, deltaMode: 0, clientX: cx, clientY: cy, bubbles: true, cancelable: true })
-  )
+  wheel({ deltaY: -100, clientX: cx, clientY: cy })
   const zoomed = read()
   pass('wheel up zooms in', zoomed.s > before.s, before.s.toFixed(3) + ' -> ' + zoomed.s.toFixed(3))
 
@@ -76,16 +124,12 @@
   )
 
   const beforePinch = read()
-  viewport.dispatchEvent(
-    new WheelEvent('wheel', { deltaY: -100, deltaMode: 0, ctrlKey: true, clientX: cx, clientY: cy, bubbles: true, cancelable: true })
-  )
+  wheel({ deltaY: -100, ctrlKey: true, clientX: cx, clientY: cy })
   const afterPinch = read()
   pass('ctrl+wheel (pinch) zooms', afterPinch.s > beforePinch.s, beforePinch.s.toFixed(3) + ' -> ' + afterPinch.s.toFixed(3))
 
   const beforeTrackpad = read()
-  viewport.dispatchEvent(
-    new WheelEvent('wheel', { deltaY: 12, deltaX: 4, deltaMode: 0, clientX: cx, clientY: cy, bubbles: true, cancelable: true })
-  )
+  wheel({ deltaY: 12, deltaX: 4, clientX: cx, clientY: cy })
   const afterTrackpad = read()
   pass(
     'trackpad scroll pans instead of zooming',
@@ -96,9 +140,7 @@
   )
 
   const beforeBurst = read()
-  viewport.dispatchEvent(
-    new WheelEvent('wheel', { deltaY: -30, deltaMode: 0, clientX: cx, clientY: cy, bubbles: true, cancelable: true })
-  )
+  wheel({ deltaY: -30, clientX: cx, clientY: cy })
   const afterBurst = read()
   pass(
     'an ambiguous delta inside a trackpad burst pans',
@@ -106,11 +148,9 @@
     'scale ' + afterBurst.s.toFixed(3) + ' dy=' + (afterBurst.y - beforeBurst.y).toFixed(1)
   )
 
-  await new Promise((resolve) => setTimeout(resolve, 250))
+  await sleep(250)
   const beforeLone = read()
-  viewport.dispatchEvent(
-    new WheelEvent('wheel', { deltaY: -30, deltaMode: 0, clientX: cx, clientY: cy, bubbles: true, cancelable: true })
-  )
+  wheel({ deltaY: -30, clientX: cx, clientY: cy })
   const afterLone = read()
   pass(
     'the same delta on its own zooms',
@@ -119,11 +159,9 @@
   )
 
   window.__setWheel('pan')
-  await new Promise((resolve) => setTimeout(resolve, 50))
+  await sleep(50)
   const beforePinnedPan = read()
-  viewport.dispatchEvent(
-    new WheelEvent('wheel', { deltaY: -100, deltaMode: 0, clientX: cx, clientY: cy, bubbles: true, cancelable: true })
-  )
+  wheel({ deltaY: -100, clientX: cx, clientY: cy })
   const afterPinnedPan = read()
   pass(
     'setting "Pan" pans a mouse wheel',
@@ -133,11 +171,9 @@
   )
 
   window.__setWheel('zoom')
-  await new Promise((resolve) => setTimeout(resolve, 50))
+  await sleep(50)
   const beforePinnedZoom = read()
-  viewport.dispatchEvent(
-    new WheelEvent('wheel', { deltaY: -8, deltaX: 3, deltaMode: 0, clientX: cx, clientY: cy, bubbles: true, cancelable: true })
-  )
+  wheel({ deltaY: -8, deltaX: 3, clientX: cx, clientY: cy })
   const afterPinnedZoom = read()
   pass(
     'setting "Zoom" zooms a trackpad-sized delta',
@@ -146,12 +182,10 @@
   )
 
   window.__setWheel('auto')
-  await new Promise((resolve) => setTimeout(resolve, 50))
+  await sleep(50)
 
   const beforeAlt = read()
-  viewport.dispatchEvent(
-    new WheelEvent('wheel', { deltaY: 100, deltaMode: 0, altKey: true, clientX: cx, clientY: cy, bubbles: true, cancelable: true })
-  )
+  wheel({ deltaY: 100, altKey: true, clientX: cx, clientY: cy })
   const afterAlt = read()
   pass(
     'alt+wheel forces pan even on a mouse',
@@ -160,43 +194,14 @@
   )
 
   const beforeOut = read()
-  viewport.dispatchEvent(
-    new WheelEvent('wheel', { deltaY: 300, deltaMode: 0, clientX: cx, clientY: cy, bubbles: true, cancelable: true })
-  )
+  wheel({ deltaY: 300, clientX: cx, clientY: cy })
   const zoomedOut = read()
   pass('wheel down zooms out', zoomedOut.s < beforeOut.s, beforeOut.s.toFixed(3) + ' -> ' + zoomedOut.s.toFixed(3))
 
   const panStart = read()
-  viewport.dispatchEvent(
-    new PointerEvent('pointerdown', {
-      pointerId: 7,
-      pointerType: 'mouse',
-      button: 0,
-      buttons: 1,
-      clientX: 200,
-      clientY: 200,
-      bubbles: true
-    })
-  )
-  viewport.dispatchEvent(
-    new PointerEvent('pointermove', {
-      pointerId: 7,
-      pointerType: 'mouse',
-      buttons: 1,
-      clientX: 260,
-      clientY: 240,
-      bubbles: true
-    })
-  )
-  viewport.dispatchEvent(
-    new PointerEvent('pointerup', {
-      pointerId: 7,
-      pointerType: 'mouse',
-      clientX: 260,
-      clientY: 240,
-      bubbles: true
-    })
-  )
+  pointer('pointerdown', { pointerId: 7, pointerType: 'mouse', button: 0, buttons: 1, clientX: 200, clientY: 200 })
+  pointer('pointermove', { pointerId: 7, pointerType: 'mouse', buttons: 1, clientX: 260, clientY: 240 })
+  pointer('pointerup', { pointerId: 7, pointerType: 'mouse', clientX: 260, clientY: 240 })
   const panned = read()
   pass(
     'drag without a modifier pans',
@@ -208,6 +213,80 @@
   viewport.dispatchEvent(new MouseEvent('dblclick', { clientX: cx, clientY: cy, bubbles: true, cancelable: true }))
   const reset = read()
   pass('double-click returns to fit', Math.abs(reset.s - initial.s) < 1e-9, reset.s.toFixed(3))
+
+  /* Keyboard: the frame listens on window, so the keys reach it wherever focus is. */
+  const beforeKeyIn = read()
+  press('+')
+  const afterKeyIn = read()
+  pass('"+" zooms in', afterKeyIn.s > beforeKeyIn.s, beforeKeyIn.s.toFixed(3) + ' -> ' + afterKeyIn.s.toFixed(3))
+
+  press('-')
+  pass('"-" zooms out', Math.abs(read().s - beforeKeyIn.s) < 1e-9, read().s.toFixed(3))
+
+  press('1')
+  pass('"1" shows the actual size', Math.abs(read().s - 1) < 1e-9, read().s.toFixed(3))
+
+  press('0')
+  pass('"0" fits the image', Math.abs(read().s - initial.s) < 1e-9, read().s.toFixed(3))
+
+  const beforeArrow = read()
+  press('ArrowRight')
+  const afterArrow = read()
+  pass(
+    'arrow keys pan',
+    Math.abs(afterArrow.x - beforeArrow.x - 48) < 0.75,
+    'dx=' + (afterArrow.x - beforeArrow.x).toFixed(1)
+  )
+
+  press('ArrowRight', { shiftKey: true })
+  const afterShiftArrow = read()
+  pass(
+    'shift+arrow pans further',
+    Math.abs(afterShiftArrow.x - afterArrow.x - 160) < 0.75,
+    'dx=' + (afterShiftArrow.x - afterArrow.x).toFixed(1)
+  )
+  press('f')
+  pass('"f" fits too', Math.abs(read().s - initial.s) < 1e-9, read().s.toFixed(3))
+
+  /* Two pointers pinch: 100px apart, then 200px. */
+  const beforeSpread = read()
+  pointer('pointerdown', { pointerId: 11, pointerType: 'touch', buttons: 1, clientX: 300, clientY: 300 })
+  pointer('pointerdown', { pointerId: 12, pointerType: 'touch', buttons: 1, clientX: 400, clientY: 300 })
+  pointer('pointermove', { pointerId: 12, pointerType: 'touch', buttons: 1, clientX: 500, clientY: 300 })
+  const spread = read()
+  pass(
+    'two-finger pinch zooms',
+    spread.s > beforeSpread.s * 1.5,
+    beforeSpread.s.toFixed(3) + ' -> ' + spread.s.toFixed(3)
+  )
+  pointer('pointerup', { pointerId: 12, pointerType: 'touch', clientX: 500, clientY: 300 })
+  pointer('pointerup', { pointerId: 11, pointerType: 'touch', clientX: 300, clientY: 300 })
+  press('0')
+
+  /* A document re-sent for an outside change keeps the view the person set up. */
+  press('1')
+  const beforeRedraw = read()
+  const urlBefore = image.getAttribute('src')
+  window.__sendDocument()
+  const redrawn = await waitFor(() => image.getAttribute('src') !== urlBefore && image.complete)
+  pass('a re-sent document loads', redrawn)
+  const afterRedraw = read()
+  pass(
+    'a re-sent document keeps the zoom and pan',
+    Math.abs(afterRedraw.s - beforeRedraw.s) < 1e-6 &&
+      Math.abs(afterRedraw.x - beforeRedraw.x) < 0.75 &&
+      Math.abs(afterRedraw.y - beforeRedraw.y) < 0.75,
+    'scale ' + beforeRedraw.s.toFixed(3) + ' -> ' + afterRedraw.s.toFixed(3)
+  )
+
+  /* Last: a broken file leaves the viewer disabled, so nothing may come after. */
+  window.__sendBroken()
+  const broke = await waitFor(() => overlay.classList.contains('visible'))
+  pass(
+    'an unreadable file shows the message overlay',
+    broke,
+    document.getElementById('overlay-text').textContent
+  )
 
   finish()
 })()

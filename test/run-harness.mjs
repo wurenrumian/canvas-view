@@ -1,18 +1,45 @@
 // Runs editor/viewer.html in headless Chrome with a mocked `orca.document`,
-// drives wheel/drag/double-click and checks the resulting transform.
+// drives wheel/drag/keyboard/pinch and checks the resulting transform.
 // Usage: node test/run-harness.mjs
-import { readFile, writeFile } from 'node:fs/promises'
+//
+// Everything Chrome writes lives in a temporary folder, so the plugin folder
+// stays clean (Orca hashes every file in it when the folder is loaded).
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
 import { spawn } from 'node:child_process'
+import os from 'node:os'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const CHROME = process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe'
-const BASE_PORT = 9333
 
-const viewer = await readFile(path.join(root, 'editor/viewer.html'), 'utf8')
+const CHROME_CANDIDATES = [
+  process.env.CHROME_PATH,
+  'C:/Program Files/Google/Chrome/Application/chrome.exe',
+  'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
+  'C:/Program Files/Chromium/Application/chrome.exe',
+  'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
+  'C:/Program Files/Microsoft/Edge/Application/msedge.exe',
+  '/usr/bin/google-chrome',
+  '/usr/bin/google-chrome-stable',
+  '/usr/bin/chromium',
+  '/usr/bin/chromium-browser',
+  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  '/Applications/Chromium.app/Contents/MacOS/Chromium'
+]
+
+function findChrome() {
+  for (const candidate of CHROME_CANDIDATES) {
+    if (candidate && existsSync(candidate)) return candidate
+  }
+  return 'chrome'
+}
+
+const CHROME = findChrome()
+const viewer = (await readFile(path.join(root, 'editor/viewer.html'), 'utf8')).replace(/\r\n/g, '\n')
 const pngBase64 = (await readFile(path.join(root, 'test/sample.png'))).toString('base64')
 const svgText = await readFile(path.join(root, 'test/sample.svg'), 'utf8')
+const viewBoxSvgText = await readFile(path.join(root, 'test/sample-viewbox.svg'), 'utf8')
 
 const appMarker = '    <script>\n      ;(() => {'
 if (!viewer.includes(appMarker)) throw new Error('could not find the viewer script tag')
@@ -20,26 +47,29 @@ if (!viewer.includes(appMarker)) throw new Error('could not find the viewer scri
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 function mockFor(kind) {
-  const documentCall =
-    kind === 'svg'
-      ? `        handler({
-          version: 1,
-          readOnly: true,
-          fileType: 'svg',
-          content: { kind: 'text', text: ${JSON.stringify(svgText)} }
-        })`
-      : `        handler({
-          version: 1,
-          readOnly: true,
-          fileType: 'png',
-          content: { kind: 'bytes', bytes: bytes.buffer }
-        })`
+  const documentSource =
+    kind === 'png'
+      ? `{ version: 1, readOnly: true, fileType: 'png', content: { kind: 'bytes', bytes: window.__pngBytes() } }`
+      : `{ version: 1, readOnly: true, fileType: 'svg', content: { kind: 'text', text: ${
+          kind === 'svg-viewbox' ? JSON.stringify(viewBoxSvgText) : JSON.stringify(svgText)
+        } } }`
 
   return `window.__errors = []
+window.__kind = '${kind}'
 window.addEventListener('error', function (event) { window.__errors.push(String(event.message)) })
 window.addEventListener('unhandledrejection', function (event) { window.__errors.push('rejection: ' + String(event.reason)) })
 window.__wheelSetting = 'auto'
 window.__wheelListeners = []
+window.__version = 0
+window.__pngBytes = function () {
+  if (!window.__pngCache) {
+    const binary = atob('${pngBase64}')
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i)
+    window.__pngCache = bytes.buffer
+  }
+  return window.__pngCache
+}
 window.orca = {
   settings: {
     get(key) {
@@ -47,18 +77,31 @@ window.orca = {
     },
     onDidChange(handler) {
       window.__wheelListeners.push(handler)
+      return { dispose() {} }
     }
   },
   document: {
     onDidChange(handler) {
-      const binary = atob('${pngBase64}')
-      const bytes = new Uint8Array(binary.length)
-      for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i)
-      setTimeout(function () {
-${documentCall}
-      }, 10)
+      window.__handler = handler
+      setTimeout(function () { window.__sendDocument() }, 10)
     }
   }
+}
+window.__sendDocument = function () {
+  if (!window.__handler) return
+  window.__version += 1
+  const doc = ${documentSource}
+  doc.version = window.__version
+  window.__handler(doc)
+}
+window.__sendBroken = function () {
+  if (!window.__handler) return
+  window.__handler({
+    version: 99,
+    readOnly: true,
+    fileType: 'png',
+    content: { kind: 'bytes', bytes: new Uint8Array([0, 1, 2, 3]).buffer }
+  })
 }
 window.__setWheel = function (value) {
   window.__wheelSetting = value
@@ -67,19 +110,33 @@ window.__setWheel = function (value) {
 `
 }
 
-async function targetUrl(port) {
+async function devtoolsPort(profileDir) {
+  const file = path.join(profileDir, 'DevToolsActivePort')
+  for (let attempt = 0; attempt < 150; attempt += 1) {
+    try {
+      const port = Number((await readFile(file, 'utf8')).split(/\r?\n/)[0])
+      if (Number.isInteger(port) && port > 0) return port
+    } catch {
+      /* not written yet */
+    }
+    await sleep(100)
+  }
+  throw new Error('Chrome never wrote DevToolsActivePort to ' + profileDir)
+}
+
+async function targetUrl(port, pageName) {
   for (let attempt = 0; attempt < 80; attempt += 1) {
     try {
       const response = await fetch(`http://127.0.0.1:${port}/json/list`)
       const targets = await response.json()
-      const page = targets.find((target) => target.type === 'page' && /\.harness-/.test(target.url))
+      const page = targets.find((target) => target.type === 'page' && target.url.includes(pageName))
       if (page && page.webSocketDebuggerUrl) return page.webSocketDebuggerUrl
     } catch {
       /* not up yet */
     }
     await sleep(100)
   }
-  throw new Error('Chrome DevTools endpoint never came up on port ' + port)
+  throw new Error('Chrome DevTools endpoint never listed ' + pageName)
 }
 
 function evaluate(ws, expression) {
@@ -108,7 +165,7 @@ const expression = `new Promise((resolve) => {
   const tick = () => {
     const results = document.getElementById('results')
     if (results) return resolve(results.textContent)
-    if (Date.now() - started > 8000) {
+    if (Date.now() - started > 15000) {
       const stage = document.getElementById('stage')
       return resolve('TIMEOUT\\ntransform=' + (stage ? stage.style.transform : 'n/a') + '\\nerrors=' + JSON.stringify(window.__errors || []))
     }
@@ -117,19 +174,45 @@ const expression = `new Promise((resolve) => {
   tick()
 })`
 
-async function runCase(name, kind, port, index) {
-  const mockFile = `test/.orca-mock-${index}.js`
-  await writeFile(path.join(root, mockFile), mockFor(kind))
+async function stopChrome(chrome) {
+  if (!chrome || chrome.exitCode !== null) return
+  const exited = new Promise((resolve) => chrome.once('exit', resolve))
+  chrome.kill()
+  await Promise.race([exited, sleep(3000)])
+  if (chrome.exitCode === null) chrome.kill('SIGKILL')
+}
 
+/* Chrome releases its profile a moment after the process exits, so give the
+   handle a few chances before giving up. */
+async function removeDir(dir, attempts = 15) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      await rm(dir, { recursive: true, force: true })
+      return true
+    } catch {
+      await sleep(200)
+    }
+  }
+  return false
+}
+
+async function runCase(name, kind, workspace, index) {
+  const dir = path.join(workspace, `case-${index}`)
+  const profile = path.join(dir, 'chrome-profile')
+  await mkdir(dir, { recursive: true })
+
+  const mockPath = path.join(dir, 'orca-mock.js')
+  await writeFile(mockPath, mockFor(kind))
+
+  const pageName = `canvas-harness-${index}.html`
+  const harness = path.join(dir, pageName)
   const html = viewer
-    .replace(appMarker, `    <script src="./.orca-mock-${index}.js"></script>\n` + appMarker)
-    .replace('</script>\n  </body>', '</script>\n    <script src="./harness-test.js"></script>\n  </body>')
-
-  const harness = path.join(root, `test/.harness-${index}.html`)
+    .replace(appMarker, `    <script src="${pathToFileURL(mockPath).href}"></script>\n` + appMarker)
+    .replace(
+      '</script>\n  </body>',
+      `</script>\n    <script src="${pathToFileURL(path.join(root, 'test/harness-test.js')).href}"></script>\n  </body>`
+    )
   await writeFile(harness, html)
-
-  const url = 'file:///' + harness.replace(/\\/g, '/')
-  const profile = path.join(root, `test/.chrome-profile-${index}`)
 
   const chrome = spawn(
     CHROME,
@@ -139,17 +222,20 @@ async function runCase(name, kind, port, index) {
       '--no-first-run',
       '--no-default-browser-check',
       '--allow-file-access-from-files',
-      '--remote-debugging-port=' + port,
+      '--disable-extensions',
+      '--remote-debugging-port=0',
       '--user-data-dir=' + profile,
       '--window-size=1200,800',
-      url
+      ...(process.env.CI ? ['--no-sandbox', '--disable-dev-shm-usage'] : []),
+      pathToFileURL(harness).href
     ],
     { stdio: 'ignore' }
   )
 
   let output = ''
   try {
-    const wsUrl = await targetUrl(port)
+    const port = await devtoolsPort(profile)
+    const wsUrl = await targetUrl(port, pageName)
     const ws = new WebSocket(wsUrl)
     await new Promise((resolve, reject) => {
       ws.addEventListener('open', resolve, { once: true })
@@ -166,7 +252,8 @@ async function runCase(name, kind, port, index) {
     }
     ws.close()
   } finally {
-    chrome.kill()
+    await stopChrome(chrome)
+    await removeDir(dir, 10)
   }
 
   console.log('\n' + name)
@@ -176,17 +263,24 @@ async function runCase(name, kind, port, index) {
 
 const cases = [
   ['bytes document (PNG)', 'png'],
-  ['text document (SVG)', 'svg']
+  ['text document (SVG)', 'svg'],
+  ['viewBox-only SVG', 'svg-viewbox']
 ]
 
+const workspace = await mkdtemp(path.join(os.tmpdir(), 'orca-canvas-harness-'))
 let ok = true
-for (let index = 0; index < cases.length; index += 1) {
-  const [name, kind] = cases[index]
-  const passed = await runCase(name, kind, BASE_PORT + index, index)
-  ok = ok && passed
-  await sleep(300)
+try {
+  for (let index = 0; index < cases.length; index += 1) {
+    const [name, kind] = cases[index]
+    const passed = await runCase(name, kind, workspace, index)
+    ok = ok && passed
+    await sleep(300)
+  }
+} finally {
+  if (!(await removeDir(workspace))) {
+    console.warn('\nleft the temporary folder behind: ' + workspace)
+  }
 }
 
 console.log(ok ? '\nAll checks passed' : '\nFAILED')
 process.exit(ok ? 0 : 1)
-

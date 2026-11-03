@@ -1,5 +1,7 @@
 # Canvas View (Orca plugin)
 
+[![CI](https://github.com/wurenrumian/canvas-view/actions/workflows/ci.yml/badge.svg)](https://github.com/wurenrumian/canvas-view/actions/workflows/ci.yml)
+
 An alternative image viewer for the Orca editor tab with **inverted gestures**:
 
 | Gesture | Orca's built-in viewer | This plugin |
@@ -8,6 +10,7 @@ An alternative image viewer for the Orca editor tab with **inverted gestures**:
 | Trackpad two-finger scroll | pan | pan (unchanged) |
 | Pinch / Ctrl+wheel | zoom | zoom |
 | Drag (left button) | nothing (Alt+drag pans) | **pan** |
+| Middle-drag | nothing | pan |
 | Drag with Alt | pan | pan |
 | Alt+wheel | — | force pan (override) |
 | Double-click | fit ↔ 100% | fit ↔ 100% |
@@ -38,8 +41,10 @@ soon as it changes.
 ## Coverage
 
 - Raster images: `.png` `.apng` `.jpg` `.jpeg` `.gif` `.webp` `.bmp` `.ico` `.avif`
-- SVG: registered twice (text and bytes) because Orca may hand an SVG to a custom
-  editor either way; only the matching contribution is ever eligible.
+- SVG: one `text` contribution. Orca matches a custom editor by file name (extension
+  or exact name) only, and `contentKind` decides how the file is handed over, not
+  which editor is eligible — registering `.svg` twice only added a second, identical
+  "Canvas" entry to the editor's view toggle.
 
 It takes over the **editor tab** viewer. It does not apply to images opened inside
 markdown previews, the chat lightbox, image diffs, artifacts, or terminal images —
@@ -63,35 +68,51 @@ No file path or filesystem access is requested, and nothing is ever written back
 
 ```bash
 # validate the manifest and contributions
-orca plugin validate . --json
+npm run validate
+
+# static checks for the editor entry (syntax, imports, refused code)
+npm run check
 
 # what it contributes and what access it asks for
 orca plugin inspect . --json
 
 # live reload while editing editor/viewer.html
 orca plugin dev watch . --json
+
+# the gesture harness (headless Chrome, no Orca needed)
+npm test
 ```
 
 Installing is a `sandboxed-ui` plugin, so Orca asks for approval: the editor reads
 every file it opens, and `settings:own` lets it read the one setting above. Approve
-only this plugin.
+only this plugin. An update that adds a capability asks again: `settings:own` arrived
+in 0.1.2, so a copy still on 0.1.1 needs one more approval when it updates.
 
 ## Verify the gestures
 
 `test/run-harness.mjs` loads the real `editor/viewer.html` in headless Chrome with a
-mocked `orca.document`, then drives wheel, drag and double-click and asserts the
-resulting transform. It runs twice: once with a `bytes` document (PNG) and once with
-a `text` document (SVG).
+mocked `orca.document`, then drives wheel, drag, keyboard, pinch, a re-sent document
+and a broken file, and asserts the resulting transform. It runs twice: once with a
+`bytes` document (PNG) and once with a `text` document (SVG).
 
 ```bash
 node test/run-harness.mjs
 ```
 
-Set `CHROME_PATH` if Chrome is installed somewhere else.
+Chrome is found at the usual install locations; set `CHROME_PATH` to override. The
+Chrome profile and the generated pages live in a temporary folder and are removed
+afterwards, so nothing is written into the plugin folder.
 
 ## Notes
 
 - Zoom is clamped to 2% – 6400% of the natural size.
+- SVG is drawn at the zoomed size instead of being stretched by a CSS transform, so
+  it stays sharp at every zoom; raster images keep the transform scale, which is
+  cheap even at 6400%.
+- An SVG's size comes from its `width`/`height` attributes, else its `viewBox`, so a
+  drawing without explicit pixel size is not left at the browser's 300×150 default.
+- When the file changes outside the editor, the viewer keeps the zoom and pan you set
+  up (it only re-fits when the drawing itself changes size, or on the first load).
 - The image is kept partially on screen (at least ~64 px in each axis) while panning,
   so it cannot be dragged completely out of view.
 - Transparent images get a subtle checkerboard background.

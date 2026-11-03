@@ -115,6 +115,11 @@
         font-size: 11px;
         pointer-events: none;
         user-select: none;
+        opacity: 0;
+        transition: opacity 160ms ease;
+      }
+      #hint.visible {
+        opacity: 1;
       }
       #overlay {
         position: absolute;
@@ -155,7 +160,7 @@
     </div>
 
     <div id="hint">Drag to pan &middot; Wheel to zoom &middot; Double-click to reset</div>
-    <div id="overlay"><p id="overlay-text"></p></div>
+    <div id="overlay" aria-live="polite"><p id="overlay-text"></p></div>
 
     <script>
       ;(() => {
@@ -167,7 +172,7 @@
           gif: 'image/gif',
           webp: 'image/webp',
           bmp: 'image/bmp',
-          ico: 'image/x-icon',
+          ico: 'image/vnd.microsoft.icon',
           avif: 'image/avif',
           svg: 'image/svg+xml'
         }
@@ -180,6 +185,7 @@
         const WHEEL_DELTA_CAP = 240
         const ZOOM_STEP = 1.25
         const DRAG_THRESHOLD = 3
+        const HINT_MS = 6000
 
         const viewport = document.getElementById('viewport')
         const stage = document.getElementById('stage')
@@ -192,29 +198,51 @@
 
         const media = { width: 0, height: 0, vector: false, ready: false, fileType: '' }
         const view = { scale: 1, x: 0, y: 0, fitted: true }
+        const surface = { width: 0, height: 0 }
 
         let objectUrl = null
         let drag = null
         let pinch = null
+        let appliedScale = 0
+        let loadedOnce = false
         const pointers = new Map()
 
         const clamp = (value, min, max) => Math.min(max, Math.max(min, value))
+
+        function measure() {
+          surface.width = viewport.clientWidth
+          surface.height = viewport.clientHeight
+        }
 
         function localPoint(event) {
           const rect = viewport.getBoundingClientRect()
           return { x: event.clientX - rect.left, y: event.clientY - rect.top }
         }
 
+        /* An SVG painted through an <img> is a bitmap, so scaling the stage with a
+           transform stretches that bitmap and the drawing goes soft. Vector files
+           are therefore re-rasterized by the browser at the zoomed size (the img
+           box grows, the stage only translates); rasters keep the cheaper
+           transform scale. Both read the same view.x/y/scale. */
         function applyView() {
-          stage.style.transform =
-            'translate3d(' + view.x + 'px, ' + view.y + 'px, 0) scale(' + view.scale + ')'
+          if (media.vector) {
+            stage.style.transform = 'translate3d(' + view.x + 'px, ' + view.y + 'px, 0)'
+            if (view.scale !== appliedScale) {
+              image.style.width = media.width * view.scale + 'px'
+              image.style.height = media.height * view.scale + 'px'
+            }
+          } else {
+            stage.style.transform =
+              'translate3d(' + view.x + 'px, ' + view.y + 'px, 0) scale(' + view.scale + ')'
+          }
+          appliedScale = view.scale
           zoomButton.textContent = Math.round(view.scale * 100) + '%'
         }
 
         function fitScale() {
           if (!media.ready) return 1
-          const vw = Math.max(1, viewport.clientWidth)
-          const vh = Math.max(1, viewport.clientHeight)
+          const vw = Math.max(1, surface.width)
+          const vh = Math.max(1, surface.height)
           const fitW = Math.max(1, vw - FIT_PADDING * 2)
           const fitH = Math.max(1, vh - FIT_PADDING * 2)
           const raw = Math.min(fitW / media.width, fitH / media.height)
@@ -223,8 +251,8 @@
 
         function clampView() {
           if (!media.ready) return
-          const vw = viewport.clientWidth
-          const vh = viewport.clientHeight
+          const vw = surface.width
+          const vh = surface.height
           const w = media.width * view.scale
           const h = media.height * view.scale
           const keepX = Math.min(KEEP_VISIBLE, Math.max(24, w * 0.25))
@@ -240,8 +268,8 @@
             applyView()
             return
           }
-          const ax = anchor ? anchor.x : viewport.clientWidth / 2
-          const ay = anchor ? anchor.y : viewport.clientHeight / 2
+          const ax = anchor ? anchor.x : surface.width / 2
+          const ay = anchor ? anchor.y : surface.height / 2
           const ratio = next / view.scale
           view.x = ax - (ax - view.x) * ratio
           view.y = ay - (ay - view.y) * ratio
@@ -255,8 +283,8 @@
           if (!media.ready) return
           const scale = fitScale()
           view.scale = scale
-          view.x = (viewport.clientWidth - media.width * scale) / 2
-          view.y = (viewport.clientHeight - media.height * scale) / 2
+          view.x = (surface.width - media.width * scale) / 2
+          view.y = (surface.height - media.height * scale) / 2
           view.fitted = true
           clampView()
           applyView()
@@ -285,23 +313,29 @@
         let wheelDevice = 'mouse'
         let lastWheelAt = 0
         let shownHint = null
+        let hintTimer = 0
 
         function readWheelMode(value) {
           const raw = value && typeof value === 'object' ? (value.settings || value)[WHEEL_SETTING] : value
           return raw === 'zoom' || raw === 'pan' ? raw : 'auto'
         }
 
-        function hintFor(mode) {
-          return mode === 'pan'
-            ? 'Drag to pan · Scroll to pan · Pinch to zoom · Double-click to reset'
-            : 'Drag to pan · Wheel to zoom · Double-click to reset'
+        function currentMode() {
+          if (wheelPreference !== 'auto') return wheelPreference
+          return wheelDevice === 'mouse' ? 'zoom' : 'pan'
         }
 
-        function setHint(mode, force) {
+        function setHint(mode) {
           if (!hint) return
-          if (!force && mode === shownHint) return
+          const text =
+            mode === 'pan'
+              ? 'Drag to pan · Scroll to pan · Pinch to zoom · Double-click to reset'
+              : 'Drag to pan · Wheel to zoom · Double-click to reset'
+          if (mode !== shownHint || hint.textContent !== text) hint.textContent = text
           shownHint = mode
-          hint.textContent = hintFor(mode)
+          hint.classList.add('visible')
+          clearTimeout(hintTimer)
+          hintTimer = setTimeout(() => hint.classList.remove('visible'), HINT_MS)
         }
 
         /* settings.get(key) answers with the value on hosts that accept a key,
@@ -320,8 +354,7 @@
             }
           }
           wheelPreference = readWheelMode(value)
-          if (wheelPreference !== 'auto') setHint(wheelPreference)
-          else setHint(wheelDevice === 'mouse' ? 'zoom' : 'pan', true)
+          setHint(currentMode())
         }
 
         function watchWheelPreference() {
@@ -362,8 +395,7 @@
             lastWheelAt = now
 
             const forced = event.altKey ? 'pan' : event.ctrlKey || event.metaKey ? 'zoom' : null
-            const detected = wheelDevice === 'mouse' ? 'zoom' : 'pan'
-            const mode = forced || (wheelPreference === 'auto' ? detected : wheelPreference)
+            const mode = forced || currentMode()
             setHint(mode)
 
             if (mode === 'pan') {
@@ -371,8 +403,7 @@
               return
             }
 
-            const unit =
-              event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? viewport.clientHeight : 1
+            const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? surface.height : 1
             const delta = clamp(event.deltaY * unit, -WHEEL_DELTA_CAP, WHEEL_DELTA_CAP)
             if (delta === 0) return
             setScaleAt(view.scale * Math.exp(-delta * WHEEL_SPEED), localPoint(event))
@@ -383,7 +414,11 @@
         /* Pointer drag pans; two pointers pinch. */
         viewport.addEventListener('pointerdown', (event) => {
           if (!media.ready) return
-          if (event.pointerType === 'mouse' && event.button !== 0) return
+          if (event.pointerType === 'mouse') {
+            if (event.button !== 0 && event.button !== 1) return
+            /* Cancelling the middle press keeps Chrome from starting autoscroll. */
+            if (event.button === 1) event.preventDefault()
+          }
           viewport.focus({ preventScroll: true })
           try {
             viewport.setPointerCapture(event.pointerId)
@@ -537,6 +572,10 @@
 
         if (typeof ResizeObserver !== 'undefined') {
           new ResizeObserver(() => {
+            const width = surface.width
+            const height = surface.height
+            measure()
+            if (width === surface.width && height === surface.height) return
             if (!media.ready) return
             if (view.fitted) fit()
             else {
@@ -545,6 +584,7 @@
             }
           }).observe(viewport)
         }
+        measure()
 
         function mimeFor(fileType) {
           return MIME[String(fileType || '').toLowerCase()] || ''
@@ -559,17 +599,55 @@
           overlay.classList.remove('visible')
         }
 
+        const SVG_VIEWBOX = /viewBox\s*=\s*["']\s*(-?[\d.]+)[\s,]+(-?[\d.]+)[\s,]+(-?[\d.]+)[\s,]+(-?[\d.]+)/i
+        const SVG_WIDTH = /<svg\b[^>]*?\swidth\s*=\s*["']\s*([\d.]+)(?:px)?\s*["']/i
+        const SVG_HEIGHT = /<svg\b[^>]*?\sheight\s*=\s*["']\s*([\d.]+)(?:px)?\s*["']/i
+
+        /* The size an SVG asks for: its width/height attributes, else its viewBox,
+           else what the browser decoded. Without this a viewBox-only drawing shows
+           up as the browser's 300x150 default, letterboxed and far too small. */
+        function vectorSize(markup, naturalWidth, naturalHeight) {
+          const text = markup || ''
+          const width = SVG_WIDTH.exec(text)
+          const height = SVG_HEIGHT.exec(text)
+          if (width && height && Number(width[1]) > 0 && Number(height[1]) > 0) {
+            return { width: Number(width[1]), height: Number(height[1]) }
+          }
+          const box = SVG_VIEWBOX.exec(text)
+          if (box && Number(box[3]) > 0 && Number(box[4]) > 0) {
+            return { width: Number(box[3]), height: Number(box[4]) }
+          }
+          return { width: naturalWidth, height: naturalHeight }
+        }
+
+        function describe() {
+          const kind = media.fileType ? media.fileType.toUpperCase() : media.vector ? 'SVG' : 'Image'
+          viewport.setAttribute(
+            'aria-label',
+            kind + ' image, ' + Math.round(media.width) + ' by ' + Math.round(media.height) + ' pixels'
+          )
+        }
+
         function renderDocument(doc) {
           if (!doc || !doc.content) return
           const payload = doc.content
           const fileType = String(doc.fileType || '').toLowerCase()
           let blob = null
+          let markup = null
 
           if (payload.kind === 'bytes' && payload.bytes) {
             blob = new Blob([payload.bytes], { type: mimeFor(fileType) || 'application/octet-stream' })
+            if (mimeFor(fileType) === 'image/svg+xml' && payload.bytes.byteLength <= 4 * 1024 * 1024) {
+              try {
+                markup = new TextDecoder().decode(payload.bytes)
+              } catch {
+                /* undecodable: fall back to the browser's size */
+              }
+            }
           } else if (payload.kind === 'text' && typeof payload.text === 'string') {
             const isSvg = mimeFor(fileType) === 'image/svg+xml' || /<svg[\s>]/i.test(payload.text)
             blob = new Blob([payload.text], { type: isSvg ? 'image/svg+xml' : 'text/plain' })
+            if (isSvg) markup = payload.text
           }
 
           if (!blob) {
@@ -583,11 +661,22 @@
           media.ready = false
 
           image.onload = () => {
-            media.width = image.naturalWidth || 512
-            media.height = image.naturalHeight || 512
+            const natural = {
+              width: image.naturalWidth || 512,
+              height: image.naturalHeight || 512
+            }
             media.vector = blob.type === 'image/svg+xml'
+            const size = media.vector
+              ? vectorSize(markup, natural.width, natural.height)
+              : natural
+            const resized = size.width !== media.width || size.height !== media.height
+            media.width = size.width
+            media.height = size.height
             media.fileType = fileType
             media.ready = true
+            appliedScale = 0
+            image.dataset.sourceWidth = String(media.width)
+            image.dataset.sourceHeight = String(media.height)
             image.style.width = media.width + 'px'
             image.style.height = media.height + 'px'
             metaLabel.textContent =
@@ -597,12 +686,23 @@
               ' \u00d7 ' +
               Math.round(media.height)
             hideMessage()
-            fit()
+            describe()
+            /* A re-sent document (the file changed outside) keeps the view the
+               person set up, unless the drawing itself changed size. */
+            if (!loadedOnce || resized) fit()
+            else {
+              clampView()
+              applyView()
+            }
+            loadedOnce = true
+            setHint(currentMode())
           }
 
           image.onerror = () => {
             media.ready = false
             image.removeAttribute('src')
+            URL.revokeObjectURL(nextUrl)
+            if (objectUrl === nextUrl) objectUrl = null
             showMessage('This file could not be displayed as an image.')
           }
 

@@ -1,0 +1,20 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  harness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      # Runs the real editor/viewer.html in headless Chrome against a mocked
+      # orca.document. CHROME_PATH is not set: the script probes the usual
+      # install locations, and google-chrome is already on the runner.
+      - run: node test/run-harness.mjs
