@@ -1,13 +1,9 @@
 {
   "name": "orca-canvas-view",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "private": true,
   "description": "Orca plugin: an image and SVG viewer for the editor tab with drag-to-pan and wheel-to-zoom.",
   "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/wurenrumian/canvas-view.git"
-  },
   "scripts": {
     "validate": "orca plugin validate . --json",
     "check": "orca plugin check . --json",

@@ -1,7 +1,5 @@
 # Canvas View (Orca plugin)
 
-[![CI](https://github.com/wurenrumian/canvas-view/actions/workflows/ci.yml/badge.svg)](https://github.com/wurenrumian/canvas-view/actions/workflows/ci.yml)
-
 An alternative image viewer for the Orca editor tab with **inverted gestures**:
 
 | Gesture | Orca's built-in viewer | This plugin |

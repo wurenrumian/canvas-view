@@ -1,16 +1,13 @@
 {
-  "$schema": "https://raw.githubusercontent.com/stablyai/orca/main/docs/schemas/plugins/orca-plugin.v2.schema.json",
   "manifestVersion": 2,
   "id": "canvas-view",
   "name": "Canvas View",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "publisher": "wurenrumian",
   "license": "MIT",
   "description": "Views images and SVGs on a canvas: drag to pan, wheel to zoom.",
-  "repository": "https://github.com/wurenrumian/canvas-view",
   "author": {
-    "name": "wurenrumian",
-    "url": "https://github.com/wurenrumian"
+    "name": "wurenrumian"
   },
   "icon": "icon.png",
   "cover": {
