@@ -30,7 +30,7 @@
   /* Rasters scale through the stage transform, vectors grow the img box, so the
      scale comes from whichever one the file type uses. */
   const read = () => {
-    const match = /^translate3d\((-?[\d.]+)px, (-?[\d.]+)px, 0(?:px)?\)(?: scale\(([\d.]+)\))?$/.exec(
+    const match = /^translate\((-?[\d.]+)px, (-?[\d.]+)px\)(?: scale\(([\d.]+)\))?$/.exec(
       stage.style.transform
     )
     if (!match) return null

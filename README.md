@@ -95,8 +95,9 @@ the harness talks to Chrome over its DevTools WebSocket.
 
 - Zoom is clamped to 2% – 6400% of the natural size.
 - SVG is drawn at the zoomed size instead of being stretched by a CSS transform, so
-  it stays sharp at every zoom; raster images keep the transform scale, which is
-  cheap even at 6400%.
+  it stays sharp at every zoom, zooming out included: the stage is only a compositor
+  layer while a drag is in flight, never while the zoom changes. Raster images keep
+  the transform scale, which is cheap even at 6400%.
 - An SVG's size comes from its `width`/`height` attributes, else its `viewBox`, so a
   drawing without explicit pixel size is not left at the browser's 300×150 default.
 - When the file changes outside the editor, the viewer keeps the zoom and pan you set

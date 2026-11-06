@@ -51,6 +51,11 @@
         top: 0;
         left: 0;
         transform-origin: 0 0;
+      }
+      /* Promote only while a drag is in flight: a promoted stage keeps one
+         raster of its contents, so a shrinking vector would be a scaled bitmap
+         instead of a fresh, sharp one. */
+      #viewport.dragging #stage {
         will-change: transform;
       }
       #image {
@@ -221,19 +226,23 @@
 
         /* An SVG painted through an <img> is a bitmap, so scaling the stage with a
            transform stretches that bitmap and the drawing goes soft. Vector files
-           are therefore re-rasterized by the browser at the zoomed size (the img
-           box grows, the stage only translates); rasters keep the cheaper
-           transform scale. Both read the same view.x/y/scale. */
+           therefore carry their zoom in the img box and the stage only translates;
+           rasters keep the cheaper transform scale. Both read view.x/y/scale.
+           The stage is deliberately not a compositor layer while zooming (no
+           will-change, no translate3d): a promoted layer keeps a single raster of
+           its contents, so shrinking the img would only scale that bitmap down and
+           the drawing would blur. It is promoted for the length of a drag instead
+           (see #viewport.dragging), where it is a pure texture blit. */
         function applyView() {
           if (media.vector) {
-            stage.style.transform = 'translate3d(' + view.x + 'px, ' + view.y + 'px, 0)'
+            stage.style.transform = 'translate(' + view.x + 'px, ' + view.y + 'px)'
             if (view.scale !== appliedScale) {
               image.style.width = media.width * view.scale + 'px'
               image.style.height = media.height * view.scale + 'px'
             }
           } else {
             stage.style.transform =
-              'translate3d(' + view.x + 'px, ' + view.y + 'px, 0) scale(' + view.scale + ')'
+              'translate(' + view.x + 'px, ' + view.y + 'px) scale(' + view.scale + ')'
           }
           appliedScale = view.scale
           zoomButton.textContent = Math.round(view.scale * 100) + '%'
