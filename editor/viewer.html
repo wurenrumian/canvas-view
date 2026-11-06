@@ -307,21 +307,12 @@
         const MOUSE_WHEEL_STEP = IS_MAC ? 4 : 40
         const TRACKPAD_WHEEL_STEP = IS_MAC ? 1.5 : 20
         const BURST_GAP_MS = 120
-        const WHEEL_SETTING = 'wheel'
-
-        let wheelPreference = 'auto'
         let wheelDevice = 'mouse'
         let lastWheelAt = 0
         let shownHint = null
         let hintTimer = 0
 
-        function readWheelMode(value) {
-          const raw = value && typeof value === 'object' ? (value.settings || value)[WHEEL_SETTING] : value
-          return raw === 'zoom' || raw === 'pan' ? raw : 'auto'
-        }
-
         function currentMode() {
-          if (wheelPreference !== 'auto') return wheelPreference
           return wheelDevice === 'mouse' ? 'zoom' : 'pan'
         }
 
@@ -336,38 +327,6 @@
           hint.classList.add('visible')
           clearTimeout(hintTimer)
           hintTimer = setTimeout(() => hint.classList.remove('visible'), HINT_MS)
-        }
-
-        /* settings.get(key) answers with the value on hosts that accept a key,
-           and with { settings } where it only answers the raw call. */
-        async function loadWheelPreference() {
-          const api = window.orca && window.orca.settings
-          if (!api || typeof api.get !== 'function') return
-          let value
-          try {
-            value = await api.get(WHEEL_SETTING)
-          } catch {
-            try {
-              value = await api.get()
-            } catch {
-              return
-            }
-          }
-          wheelPreference = readWheelMode(value)
-          setHint(currentMode())
-        }
-
-        function watchWheelPreference() {
-          const api = window.orca && window.orca.settings
-          if (!api || typeof api.onDidChange !== 'function') return
-          try {
-            api.onDidChange((change) => {
-              if (change && change.key && change.key !== WHEEL_SETTING) return
-              loadWheelPreference()
-            })
-          } catch {
-            /* no live updates: the setting applies on the next open */
-          }
         }
 
         /* A wheel notch is one large step, a trackpad is a burst of small ones.
@@ -715,8 +674,6 @@
             showMessage('This viewer must run inside Orca.')
             return
           }
-          loadWheelPreference()
-          watchWheelPreference()
           try {
             window.orca.document.onDidChange((doc) => {
               try {

@@ -158,32 +158,6 @@
     beforeLone.s.toFixed(3) + ' -> ' + afterLone.s.toFixed(3)
   )
 
-  window.__setWheel('pan')
-  await sleep(50)
-  const beforePinnedPan = read()
-  wheel({ deltaY: -100, clientX: cx, clientY: cy })
-  const afterPinnedPan = read()
-  pass(
-    'setting "Pan" pans a mouse wheel',
-    Math.abs(afterPinnedPan.s - beforePinnedPan.s) < 1e-9 &&
-      Math.abs(afterPinnedPan.y - beforePinnedPan.y - 100) < 1,
-    'scale ' + afterPinnedPan.s.toFixed(3) + ' dy=' + (afterPinnedPan.y - beforePinnedPan.y).toFixed(1)
-  )
-
-  window.__setWheel('zoom')
-  await sleep(50)
-  const beforePinnedZoom = read()
-  wheel({ deltaY: -8, deltaX: 3, clientX: cx, clientY: cy })
-  const afterPinnedZoom = read()
-  pass(
-    'setting "Zoom" zooms a trackpad-sized delta',
-    afterPinnedZoom.s > beforePinnedZoom.s,
-    beforePinnedZoom.s.toFixed(3) + ' -> ' + afterPinnedZoom.s.toFixed(3)
-  )
-
-  window.__setWheel('auto')
-  await sleep(50)
-
   const beforeAlt = read()
   wheel({ deltaY: 100, altKey: true, clientX: cx, clientY: cy })
   const afterAlt = read()

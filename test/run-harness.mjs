@@ -62,8 +62,6 @@ function mockFor(kind) {
 window.__kind = '${kind}'
 window.addEventListener('error', function (event) { window.__errors.push(String(event.message)) })
 window.addEventListener('unhandledrejection', function (event) { window.__errors.push('rejection: ' + String(event.reason)) })
-window.__wheelSetting = 'auto'
-window.__wheelListeners = []
 window.__version = 0
 window.__pngBytes = function () {
   if (!window.__pngCache) {
@@ -75,15 +73,6 @@ window.__pngBytes = function () {
   return window.__pngCache
 }
 window.orca = {
-  settings: {
-    get(key) {
-      return Promise.resolve(key ? window.__wheelSetting : { settings: { wheel: window.__wheelSetting } })
-    },
-    onDidChange(handler) {
-      window.__wheelListeners.push(handler)
-      return { dispose() {} }
-    }
-  },
   document: {
     onDidChange(handler) {
       window.__handler = handler
@@ -106,10 +95,6 @@ window.__sendBroken = function () {
     fileType: 'png',
     content: { kind: 'bytes', bytes: new Uint8Array([0, 1, 2, 3]).buffer }
   })
-}
-window.__setWheel = function (value) {
-  window.__wheelSetting = value
-  window.__wheelListeners.forEach(function (handler) { handler({ key: 'wheel', value: value }) })
 }
 `
 }

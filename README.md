@@ -23,18 +23,8 @@ ones. Between the two the last device wins, so a single odd value cannot flip th
 gesture mid-scroll. If the guess is ever wrong, `Alt+wheel` always pans and
 `Ctrl`/`Cmd`+wheel always zooms.
 
-## Settings
-
-**Settings → Plugins → Canvas View → Mouse wheel**
-
-| Value | Effect |
-| --- | --- |
-| Auto-detect (default) | Mouse wheel zooms, trackpad scroll pans, pinch zooms |
-| Zoom | Every wheel event zooms, trackpad included |
-| Pan | Every wheel event pans, mouse wheel included |
-
-The choice is stored by Orca (capability `settings:own`) and applies to open tabs as
-soon as it changes.
+There is no preference to set: the plugin asks for no capabilities, so the editor
+only ever reads the file you open.
 
 ## Coverage
 
@@ -82,9 +72,8 @@ npm test
 ```
 
 Installing is a `sandboxed-ui` plugin, so Orca asks for approval: the editor reads
-every file it opens, and `settings:own` lets it read the one setting above. Approve
-only this plugin. An update that adds a capability asks again: `settings:own` arrived
-in 0.1.2, so a copy still on 0.1.1 needs one more approval when it updates.
+every file it opens. Approve only this plugin. It asks for no capabilities, so an
+update never re-prompts for new access.
 
 ## Verify the gestures
 

@@ -2,7 +2,7 @@
   "manifestVersion": 2,
   "id": "canvas-view",
   "name": "Canvas View",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "publisher": "wurenrumian",
   "license": "MIT",
   "description": "Views images and SVGs on a canvas: drag to pan, wheel to zoom.",
@@ -19,19 +19,7 @@
   },
   "execution": "sandboxed-ui",
   "pluginApi": 1,
-  "capabilities": [{ "kind": "settings:own" }],
   "contributes": {
-    "settings": [
-      {
-        "key": "wheel",
-        "title": "Mouse wheel",
-        "description": "Zoom the way an image canvas does, pan the way Orca's built-in viewer does, or let the viewer tell a mouse from a trackpad.",
-        "type": "string",
-        "enum": ["auto", "zoom", "pan"],
-        "enumLabels": ["Auto-detect", "Zoom", "Pan"],
-        "default": "auto"
-      }
-    ],
     "customEditors": [
       {
         "id": "canvas-raster",
