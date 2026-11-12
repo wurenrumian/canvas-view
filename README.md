@@ -94,6 +94,10 @@ the harness talks to Chrome over its DevTools WebSocket.
 ## Notes
 
 - Zoom is clamped to 2% – 6400% of the natural size.
+- A trackpad pinch reaches the page as a burst of one- or two-pixel wheel steps, and
+  the whole gesture travels far less than one mouse notch. The zoom gain therefore
+  rises as the step gets smaller, so a pinch lands in one gesture instead of needing
+  half a dozen, while a wheel notch keeps the speed it had.
 - SVG is drawn at the zoomed size instead of being stretched by a CSS transform, so
   it stays sharp at every zoom, zooming out included: the stage is only a compositor
   layer while a drag is in flight, never while the zoom changes. Raster images keep

@@ -187,6 +187,8 @@
         const FIT_PADDING = 24
         const KEEP_VISIBLE = 64
         const WHEEL_SPEED = 0.0028
+        const PINCH_GAIN = 8
+        const PINCH_TAIL = 3
         const WHEEL_DELTA_CAP = 240
         const ZOOM_STEP = 1.25
         const DRAG_THRESHOLD = 3
@@ -309,9 +311,9 @@
 
         /* Wheel: a mouse wheel zooms about the pointer, a trackpad keeps the
            platform behaviour (two-finger scroll pans, pinch zooms). The device
-           is inferred from the wheel events and held steady between gestures;
-           Settings → Plugins → Canvas View can pin it instead. Alt always pans
-           and Ctrl/Meta always zooms, so a wrong inference is one key away. */
+           is inferred from the wheel events and held steady between gestures.
+           Alt always pans and Ctrl/Meta always zooms, so a wrong inference is
+           one key away. */
         const IS_MAC = /Mac/i.test(navigator.userAgent || '')
         const MOUSE_WHEEL_STEP = IS_MAC ? 4 : 40
         const TRACKPAD_WHEEL_STEP = IS_MAC ? 1.5 : 20
@@ -351,6 +353,18 @@
           return now - lastWheelAt < BURST_GAP_MS ? 'trackpad' : 'mouse'
         }
 
+        /* The distance a wheel step is worth. A mouse sends one notch of about
+           100 px, a trackpad pinch a burst of steps of one or two px; with one
+           gain for both a whole pinch travels far less than a notch, so it lands
+           with a fraction of the zoom and has to be repeated. A tiny step is
+           therefore worth PINCH_GAIN times its own length, and that extra fades
+           out over PINCH_TAIL px so a notch keeps the speed the mouse was tuned
+           for. */
+        function wheelTravel(delta) {
+          const step = Math.abs(delta)
+          return step + (PINCH_GAIN - 1) * PINCH_TAIL * (1 - Math.exp(-step / PINCH_TAIL))
+        }
+
         viewport.addEventListener(
           'wheel',
           (event) => {
@@ -374,7 +388,7 @@
             const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? surface.height : 1
             const delta = clamp(event.deltaY * unit, -WHEEL_DELTA_CAP, WHEEL_DELTA_CAP)
             if (delta === 0) return
-            setScaleAt(view.scale * Math.exp(-delta * WHEEL_SPEED), localPoint(event))
+            setScaleAt(view.scale * Math.exp(-wheelTravel(delta) * Math.sign(delta) * WHEEL_SPEED), localPoint(event))
           },
           { passive: false }
         )

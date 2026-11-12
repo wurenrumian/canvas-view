@@ -222,6 +222,23 @@
   press('f')
   pass('"f" fits too', Math.abs(read().s - initial.s) < 1e-9, read().s.toFixed(3))
 
+  /* A pinch reaches the page as many tiny steps, not as one notch, so the same
+     distance has to zoom more when it arrives that way: one pinch should land,
+     not a dozen of them. */
+  press('0')
+  const singleStart = read().s
+  wheel({ deltaY: -48, ctrlKey: true, clientX: cx, clientY: cy })
+  const singleZoom = read().s / singleStart
+  press('0')
+  const burstStart = read().s
+  for (let i = 0; i < 24; i += 1) wheel({ deltaY: -2, ctrlKey: true, clientX: cx, clientY: cy })
+  const burstZoom = read().s / burstStart
+  pass(
+    'a pinch delivered in small steps zooms more than the same distance in one',
+    burstZoom > 1.5 && burstZoom > singleZoom * 1.4,
+    'one step ' + singleZoom.toFixed(2) + 'x vs 24 tiny steps ' + burstZoom.toFixed(2) + 'x'
+  )
+
   /* Two pointers pinch: 100px apart, then 200px. */
   const beforeSpread = read()
   pointer('pointerdown', { pointerId: 11, pointerType: 'touch', buttons: 1, clientX: 300, clientY: 300 })
